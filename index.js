@@ -201,10 +201,44 @@ app.post("/contents", async (req, res) => {
 
 app.put("/contents/:id", async (req, res) => {
     try {
-        const { Title, Description, Status } = req.body;
+        const {
+            Title,
+            OriginalTitle,
+            Description,
+            Type,
+            ReleaseDate,
+            IMDBRating,
+            PosterURL,
+            Status,
+            Country,
+            Language,
+        } = req.body;
         const result = await db.query(
-            "UPDATE Content SET Title=$1, Description=$2, Status=$3 WHERE ContentID=$4 RETURNING *",
-            [Title, Description, Status, req.params.id]
+            `UPDATE Content SET
+                Title=$1,
+                OriginalTitle=$2,
+                Description=$3,
+                Type=$4,
+                ReleaseDate=$5,
+                IMDBRating=$6,
+                PosterURL=$7,
+                Status=$8,
+                Country=$9,
+                Language=$10
+            WHERE ContentID=$11 RETURNING *`,
+            [
+                Title,
+                OriginalTitle,
+                Description,
+                Type,
+                ReleaseDate,
+                IMDBRating,
+                PosterURL,
+                Status,
+                Country,
+                Language,
+                req.params.id,
+            ]
         );
         if (result.rows.length === 0)
             return res.status(404).json({ error: "Content not found" });
@@ -471,10 +505,12 @@ app.post("/contents/:contentId/seasons", async (req, res) => {
 
 app.put("/contents/:contentId/seasons/:seasonId", async (req, res) => {
     try {
-        const { Title, PosterURL, ReleaseDate, EpisodeCount } = req.body;
+        const { SeasonNumber, Title, PosterURL, ReleaseDate, EpisodeCount } =
+            req.body;
         const result = await db.query(
-            "UPDATE Seasons SET Title=$1, PosterURL=$2, ReleaseDate=$3, EpisodeCount=$4 WHERE SeasonID=$5 AND ContentID=$6 RETURNING *",
+            "UPDATE Seasons SET SeasonNumber=$1, Title=$2, PosterURL=$3, ReleaseDate=$4, EpisodeCount=$5 WHERE SeasonID=$6 AND ContentID=$7 RETURNING *",
             [
+                SeasonNumber,
                 Title,
                 PosterURL,
                 ReleaseDate,
@@ -565,22 +601,35 @@ app.post("/seasons/:seasonId/episodes", async (req, res) => {
 app.put("/seasons/:seasonId/episodes/:episodeId", async (req, res) => {
     try {
         const {
+            EpisodeNumber, // <-- phải có trường này
             Title,
             Description,
             Duration,
             VideoURL,
             ThumbnailURL,
             ReleaseDate,
+            ViewCount,
         } = req.body;
         const result = await db.query(
-            "UPDATE Episodes SET Title=$1, Description=$2, Duration=$3, VideoURL=$4, ThumbnailURL=$5, ReleaseDate=$6 WHERE EpisodeID=$7 AND SeasonID=$8 RETURNING *",
+            `UPDATE Episodes SET
+                EpisodeNumber=$1,
+                Title=$2,
+                Description=$3,
+                Duration=$4,
+                VideoURL=$5,
+                ThumbnailURL=$6,
+                ReleaseDate=$7,
+                ViewCount=$8
+            WHERE EpisodeID=$9 AND SeasonID=$10 RETURNING *`,
             [
+                EpisodeNumber,
                 Title,
                 Description,
                 Duration,
                 VideoURL,
                 ThumbnailURL,
                 ReleaseDate,
+                ViewCount,
                 req.params.episodeId,
                 req.params.seasonId,
             ]
