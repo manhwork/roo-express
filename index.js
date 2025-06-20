@@ -8,7 +8,14 @@ const app = express();
 const port = 3000;
 
 app.use(morgan("dev"));
-app.use(cors());
+app.use(
+    cors({
+        origin: "http://localhost:5173",
+        credentials: true,
+        methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+        allowedHeaders: "Content-Type, Authorization",
+    })
+);
 
 // Cấu hình pool cho database 1
 const db = new Pool({
@@ -42,11 +49,24 @@ app.get("/", (req, res) => {
     res.json({ info: "Express + 2 Postgres Databases" });
 });
 
-// ===== USERS CRUD =====
+// ===== USERS CRUD (có phân trang) =====
 app.get("/users", async (req, res) => {
     try {
-        const result = await db.query("SELECT * FROM Users");
-        res.json(result.rows);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            "SELECT * FROM Users ORDER BY UserID LIMIT $1 OFFSET $2",
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Users");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -107,11 +127,24 @@ app.delete("/users/:id", async (req, res) => {
     }
 });
 
-// ===== CONTENT CRUD =====
+// ===== CONTENT CRUD (có phân trang) =====
 app.get("/contents", async (req, res) => {
     try {
-        const result = await db.query("SELECT * FROM Content");
-        res.json(result.rows);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            "SELECT * FROM Content ORDER BY ContentID LIMIT $1 OFFSET $2",
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Content");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -195,11 +228,24 @@ app.delete("/contents/:id", async (req, res) => {
     }
 });
 
-// ===== ACTORS CRUD =====
+// ===== ACTORS CRUD (có phân trang) =====
 app.get("/actors", async (req, res) => {
     try {
-        const result = await db.query("SELECT * FROM Actors");
-        res.json(result.rows);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            "SELECT * FROM Actors ORDER BY ActorID LIMIT $1 OFFSET $2",
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Actors");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -235,10 +281,19 @@ app.post("/actors", async (req, res) => {
 
 app.put("/actors/:id", async (req, res) => {
     try {
-        const { Name, Bio, Nationality } = req.body;
+        const { Name, OriginalName, Bio, BirthDate, Nationality, PhotoURL } =
+            req.body;
         const result = await db.query(
-            "UPDATE Actors SET Name=$1, Bio=$2, Nationality=$3 WHERE ActorID=$4 RETURNING *",
-            [Name, Bio, Nationality, req.params.id]
+            "UPDATE Actors SET Name=$1, OriginalName=$2, Bio=$3, BirthDate=$4, Nationality=$5, PhotoURL=$6 WHERE ActorID=$7 RETURNING *",
+            [
+                Name,
+                OriginalName,
+                Bio,
+                BirthDate,
+                Nationality,
+                PhotoURL,
+                req.params.id,
+            ]
         );
         if (result.rows.length === 0)
             return res.status(404).json({ error: "Actor not found" });
@@ -262,11 +317,24 @@ app.delete("/actors/:id", async (req, res) => {
     }
 });
 
-// ===== DIRECTORS CRUD =====
+// ===== DIRECTORS CRUD (có phân trang) =====
 app.get("/directors", async (req, res) => {
     try {
-        const result = await db.query("SELECT * FROM Directors");
-        res.json(result.rows);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            "SELECT * FROM Directors ORDER BY DirectorID LIMIT $1 OFFSET $2",
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Directors");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -302,10 +370,19 @@ app.post("/directors", async (req, res) => {
 
 app.put("/directors/:id", async (req, res) => {
     try {
-        const { Name, Bio, Nationality } = req.body;
+        const { Name, OriginalName, Bio, BirthDate, Nationality, PhotoURL } =
+            req.body;
         const result = await db.query(
-            "UPDATE Directors SET Name=$1, Bio=$2, Nationality=$3 WHERE DirectorID=$4 RETURNING *",
-            [Name, Bio, Nationality, req.params.id]
+            "UPDATE Directors SET Name=$1, OriginalName=$2, Bio=$3, BirthDate=$4, Nationality=$5, PhotoURL=$6 WHERE DirectorID=$7 RETURNING *",
+            [
+                Name,
+                OriginalName,
+                Bio,
+                BirthDate,
+                Nationality,
+                PhotoURL,
+                req.params.id,
+            ]
         );
         if (result.rows.length === 0)
             return res.status(404).json({ error: "Director not found" });
@@ -525,6 +602,141 @@ app.delete("/seasons/:seasonId/episodes/:episodeId", async (req, res) => {
         if (result.rows.length === 0)
             return res.status(404).json({ error: "Episode not found" });
         res.json({ message: "Episode deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ===== GENRES CRUD (có phân trang) =====
+app.get("/genres", async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            "SELECT * FROM Genres ORDER BY GenreID LIMIT $1 OFFSET $2",
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Genres");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get("/genres/:id", async (req, res) => {
+    try {
+        const result = await db.query(
+            "SELECT * FROM Genres WHERE GenreID = $1",
+            [req.params.id]
+        );
+        if (result.rows.length === 0)
+            return res.status(404).json({ error: "Genre not found" });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/genres", async (req, res) => {
+    try {
+        const { GenreName, Description } = req.body;
+        const result = await db.query(
+            "INSERT INTO Genres (GenreName, Description) VALUES ($1, $2) RETURNING *",
+            [GenreName, Description]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put("/genres/:id", async (req, res) => {
+    try {
+        const { GenreName, Description } = req.body;
+        const result = await db.query(
+            "UPDATE Genres SET GenreName=$1, Description=$2 WHERE GenreID=$3 RETURNING *",
+            [GenreName, Description, req.params.id]
+        );
+        if (result.rows.length === 0)
+            return res.status(404).json({ error: "Genre not found" });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete("/genres/:id", async (req, res) => {
+    try {
+        const result = await db.query(
+            "DELETE FROM Genres WHERE GenreID=$1 RETURNING *",
+            [req.params.id]
+        );
+        if (result.rows.length === 0)
+            return res.status(404).json({ error: "Genre not found" });
+        res.json({ message: "Genre deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lấy toàn bộ reviews (có phân trang)
+app.get("/reviews", async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            `SELECT r.*, u.Username, u.Avatar, c.Title AS ContentTitle
+             FROM Reviews r
+             JOIN Users u ON r.UserID = u.UserID
+             JOIN Content c ON r.ContentID = c.ContentID
+             ORDER BY r.ReviewDate DESC
+             LIMIT $1 OFFSET $2`,
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Reviews");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lấy toàn bộ comments (có phân trang)
+app.get("/comments", async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const data = await db.query(
+            `SELECT c.*, u.Username, u.Avatar, ct.Title AS ContentTitle
+             FROM Comments c
+             JOIN Users u ON c.UserID = u.UserID
+             JOIN Content ct ON c.ContentID = ct.ContentID
+             ORDER BY c.CommentDate DESC
+             LIMIT $1 OFFSET $2`,
+            [limit, offset]
+        );
+        const total = await db.query("SELECT COUNT(*) FROM Comments");
+        res.json({
+            data: data.rows,
+            total: parseInt(total.rows[0].count),
+            page,
+            limit,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
