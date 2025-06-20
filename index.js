@@ -791,6 +791,363 @@ app.get("/comments", async (req, res) => {
     }
 });
 
+// ================== DASHBOARD & BIỂU ĐỒ (DW) ==================
+
+// Tổng số phim (movie + episode)
+app.get("/dw/summary/contents", async (req, res) => {
+    try {
+        const result = await dw.query(
+            "SELECT COUNT(*) FROM DimContent WHERE IsCurrent = TRUE AND ContentType = 'Movie'"
+        );
+        const tvResult = await dw.query(
+            "SELECT COUNT(*) FROM DimContent WHERE IsCurrent = TRUE AND ContentType = 'Episode'"
+        );
+        res.json({
+            totalMovies: parseInt(result.rows[0].count),
+            totalEpisodes: parseInt(tvResult.rows[0].count),
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Tổng số user hoạt động
+app.get("/dw/summary/users", async (req, res) => {
+    try {
+        const result = await dw.query(
+            "SELECT COUNT(*) FROM DimUser WHERE IsCurrent = TRUE AND IsActive = TRUE"
+        );
+        res.json({ totalUsers: parseInt(result.rows[0].count) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Tổng lượt xem
+app.get("/dw/summary/views", async (req, res) => {
+    try {
+        const result = await dw.query(
+            "SELECT SUM(ViewCount) as totalViews FROM FactContentViews"
+        );
+        res.json({ totalViews: parseInt(result.rows[0].totalviews) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lượt xem theo tháng
+app.get("/dw/views/month", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.Month, dd.Year, SUM(fcv.ViewCount) as views
+            FROM FactContentViews fcv
+            JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+            GROUP BY dd.Year, dd.Month
+            ORDER BY dd.Year, dd.Month
+        `);
+        
+        console.log(result.rows);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lượt xem theo ngày (30 ngày gần nhất)
+app.get("/dw/views/day", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.Date, SUM(fcv.ViewCount) as views
+            FROM FactContentViews fcv
+            JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+            GROUP BY dd.Date
+            ORDER BY dd.Date DESC
+            LIMIT 30
+        `);
+        res.json(result.rows.reverse());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lượt xem theo năm
+app.get("/dw/views/year", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.Year, SUM(fcv.ViewCount) as views
+            FROM FactContentViews fcv
+            JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+            GROUP BY dd.Year
+            ORDER BY dd.Year
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lượt xem theo thể loại
+app.get("/dw/views/genre", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dg.GenreName, SUM(fcp.TotalViews) as views
+            FROM FactContentPerformance fcp
+            JOIN DimGenre dg ON fcp.GenreKey = dg.GenreKey
+            GROUP BY dg.GenreName
+            ORDER BY views DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Top phim được xem nhiều nhất
+app.get("/dw/top-content/views", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dc.Title, SUM(fcp.TotalViews) as views
+            FROM FactContentPerformance fcp
+            JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+            WHERE dc.IsCurrent = TRUE
+            GROUP BY dc.Title
+            ORDER BY views DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Top phim có điểm đánh giá cao nhất
+app.get("/dw/top-content/rating", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dc.Title, AVG(fcp.AverageRating) as rating
+            FROM FactContentPerformance fcp
+            JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+            WHERE dc.IsCurrent = TRUE
+            GROUP BY dc.Title
+            ORDER BY rating DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Top user xem nhiều nhất
+app.get("/dw/top-users", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT du.Username, SUM(fcv.ViewCount) as views
+            FROM FactContentViews fcv
+            JOIN DimUser du ON fcv.UserKey = du.UserKey
+            GROUP BY du.Username
+            ORDER BY views DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Điểm đánh giá trung bình theo tháng
+app.get("/dw/ratings/month", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.Month, dd.Year, AVG(fcp.AverageRating) as avg_rating
+            FROM FactContentPerformance fcp
+            JOIN DimDate dd ON fcp.DateKey = dd.DateKey
+            GROUP BY dd.Year, dd.Month
+            ORDER BY dd.Year, dd.Month
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Phổ điểm đánh giá
+app.get("/dw/ratings/distribution", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT ROUND(AverageRating) as rating_bin, COUNT(*) as count
+            FROM FactContentPerformance
+            GROUP BY rating_bin
+            ORDER BY rating_bin
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Phân loại tương tác
+app.get("/dw/engagement/type", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT EngagementType, COUNT(*) as count
+            FROM FactUserEngagement
+            GROUP BY EngagementType
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Tổng số lượt like/comment theo ngày
+app.get("/dw/engagement/timeline", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.Date, 
+                SUM(CASE WHEN EngagementType = 'Like' THEN 1 ELSE 0 END) as likes,
+                SUM(CASE WHEN EngagementType = 'Comment' THEN 1 ELSE 0 END) as comments,
+                SUM(CASE WHEN EngagementType = 'Review' THEN 1 ELSE 0 END) as reviews
+            FROM FactUserEngagement fue
+            JOIN DimDate dd ON fue.DateKey = dd.DateKey
+            GROUP BY dd.Date
+            ORDER BY dd.Date
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Phân bổ thiết bị
+app.get("/dw/device/distribution", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT DeviceType, COUNT(*) as count
+            FROM DimDevice
+            GROUP BY DeviceType
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Phân bố người dùng theo tỉnh thành
+app.get("/dw/user/location", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT City, COUNT(*) as user_count
+            FROM DimLocation
+            GROUP BY City
+            ORDER BY user_count DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Hành vi người dùng theo thời gian trong ngày
+app.get("/dw/user/activity-heatmap", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.DayName, dt.Hour, SUM(fua.ActivityCount) as activity
+            FROM FactUserActivity fua
+            JOIN DimDate dd ON fua.DateKey = dd.DateKey
+            JOIN DimTime dt ON fua.TimeKey = dt.TimeKey
+            GROUP BY dd.DayName, dt.Hour
+            ORDER BY dd.DayName, dt.Hour
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Top nội dung được yêu thích nhiều nhất (theo lượt thích)
+app.get("/dw/top-content/likes", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dc.Title, SUM(fue.LikeCount) as likes
+            FROM FactUserEngagement fue
+            JOIN DimContent dc ON fue.ContentKey = dc.ContentKey
+            WHERE fue.EngagementType = 'Like'
+            GROUP BY dc.Title
+            ORDER BY likes DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get("/dw/top-countries", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dc.Country, SUM(fcp.TotalViews) as views
+            FROM FactContentPerformance fcp
+            JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+            WHERE dc.Country IS NOT NULL
+            GROUP BY dc.Country
+            ORDER BY views DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get("/dw/avg-watchtime-user", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT du.Username, ROUND(AVG(fcv.DurationWatched)/60) as avg_minutes
+            FROM FactContentViews fcv
+            JOIN DimUser du ON fcv.UserKey = du.UserKey
+            GROUP BY du.Username
+            ORDER BY avg_minutes DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Lượt xem theo mùa
+app.get("/dw/views/season", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT dd.Quarter as season, dd.Year, SUM(fcv.ViewCount) as views
+            FROM FactContentViews fcv
+            JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+            GROUP BY dd.Year, dd.Quarter
+            ORDER BY dd.Year, dd.Quarter
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get("/dw/popular-browsers", async (req, res) => {
+    try {
+        const result = await dw.query(`
+            SELECT Browser, COUNT(*) as count
+            FROM DimDevice
+            WHERE Browser IS NOT NULL
+            GROUP BY Browser
+            ORDER BY count DESC
+            LIMIT 10
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.listen(port, () => {
     console.log(`App running on port ${port}.`);
 });
