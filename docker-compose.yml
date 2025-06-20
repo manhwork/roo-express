@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  postgres1:
+    image: postgres:16-alpine
+    container_name: postgres1
+    environment:
+      POSTGRES_USER: user1
+      POSTGRES_PASSWORD: pass1
+      POSTGRES_DB: db1
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./postgres1-data:/var/lib/postgresql/data
+
+  postgres2:
+    image: postgres:16-alpine
+    container_name: postgres2
+    environment:
+      POSTGRES_USER: user2
+      POSTGRES_PASSWORD: pass2
+      POSTGRES_DB: db2
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./postgres2-data:/var/lib/postgresql/data

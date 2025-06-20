@@ -1,0 +1,41 @@
+# USERS
+curl -X GET http://localhost:3000/users
+curl -X GET http://localhost:3000/users/1
+curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d "{\"Username\":\"testuser\",\"Password\":\"123456\",\"Email\":\"test@example.com\",\"FullName\":\"Test User\",\"Avatar\":\"avatar.jpg\"}"
+curl -X PUT http://localhost:3000/users/1 -H "Content-Type: application/json" -d "{\"FullName\":\"Updated Name\",\"Avatar\":\"avatar2.jpg\",\"IsActive\":true,\"IsAdmin\":false}"
+curl -X DELETE http://localhost:3000/users/1
+
+# CONTENT
+curl -X GET http://localhost:3000/contents
+curl -X GET http://localhost:3000/contents/1
+curl -X POST http://localhost:3000/contents -H "Content-Type: application/json" -d "{\"Title\":\"Movie Title\",\"OriginalTitle\":\"Original\",\"Description\":\"Desc\",\"Type\":\"movie\",\"ReleaseDate\":\"2024-01-01\",\"IMDBRating\":8.5,\"PosterURL\":\"poster.jpg\",\"Status\":\"Completed\",\"Country\":\"USA\",\"Language\":\"English\"}"
+curl -X PUT http://localhost:3000/contents/1 -H "Content-Type: application/json" -d "{\"Title\":\"Updated Title\",\"Description\":\"Updated Desc\",\"Status\":\"Ongoing\"}"
+curl -X DELETE http://localhost:3000/contents/1
+
+# ACTORS
+curl -X GET http://localhost:3000/actors
+curl -X GET http://localhost:3000/actors/1
+curl -X POST http://localhost:3000/actors -H "Content-Type: application/json" -d "{\"Name\":\"Actor Name\",\"OriginalName\":\"Original Name\",\"Bio\":\"Bio\",\"BirthDate\":\"1990-01-01\",\"Nationality\":\"Country\",\"PhotoURL\":\"photo.jpg\"}"
+curl -X PUT http://localhost:3000/actors/1 -H "Content-Type: application/json" -d "{\"Name\":\"Updated Name\",\"Bio\":\"Updated Bio\",\"Nationality\":\"Updated Country\"}"
+curl -X DELETE http://localhost:3000/actors/1
+
+# DIRECTORS
+curl -X GET http://localhost:3000/directors
+curl -X GET http://localhost:3000/directors/1
+curl -X POST http://localhost:3000/directors -H "Content-Type: application/json" -d "{\"Name\":\"Director Name\",\"OriginalName\":\"Original Name\",\"Bio\":\"Bio\",\"BirthDate\":\"1980-01-01\",\"Nationality\":\"Country\",\"PhotoURL\":\"photo.jpg\"}"
+curl -X PUT http://localhost:3000/directors/1 -H "Content-Type: application/json" -d "{\"Name\":\"Updated Name\",\"Bio\":\"Updated Bio\",\"Nationality\":\"Updated Country\"}"
+curl -X DELETE http://localhost:3000/directors/1
+
+# SEASONS (cho TV Show có ContentID=2)
+curl -X GET http://localhost:3000/contents/2/seasons
+curl -X GET http://localhost:3000/contents/2/seasons/1
+curl -X POST http://localhost:3000/contents/2/seasons -H "Content-Type: application/json" -d "{\"SeasonNumber\":1,\"Title\":\"Season 1\",\"PosterURL\":\"season1.jpg\",\"ReleaseDate\":\"2024-01-01\",\"EpisodeCount\":10}"
+curl -X PUT http://localhost:3000/contents/2/seasons/1 -H "Content-Type: application/json" -d "{\"Title\":\"Season 1 Updated\",\"PosterURL\":\"season1_new.jpg\",\"ReleaseDate\":\"2024-02-01\",\"EpisodeCount\":12}"
+curl -X DELETE http://localhost:3000/contents/2/seasons/1
+
+# EPISODES (cho SeasonID=1)
+curl -X GET http://localhost:3000/seasons/1/episodes
+curl -X GET http://localhost:3000/seasons/1/episodes/1
+curl -X POST http://localhost:3000/seasons/1/episodes -H "Content-Type: application/json" -d "{\"EpisodeNumber\":1,\"Title\":\"Episode 1\",\"Description\":\"First episode\",\"Duration\":45,\"VideoURL\":\"video1.mp4\",\"ThumbnailURL\":\"thumb1.jpg\",\"ReleaseDate\":\"2024-01-02\"}"
+curl -X PUT http://localhost:3000/seasons/1/episodes/1 -H "Content-Type: application/json" -d "{\"Title\":\"Episode 1 Updated\",\"Description\":\"Updated desc\",\"Duration\":50,\"VideoURL\":\"video1_new.mp4\",\"ThumbnailURL\":\"thumb1_new.jpg\",\"ReleaseDate\":\"2024-01-03\"}"
+curl -X DELETE http://localhost:3000/seasons/1/episodes/1
