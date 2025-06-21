@@ -796,15 +796,10 @@ app.get("/comments", async (req, res) => {
 // Tổng số phim (movie + episode)
 app.get("/dw/summary/contents", async (req, res) => {
     try {
-        const result = await dw.query(
-            "SELECT COUNT(*) FROM DimContent WHERE IsCurrent = TRUE AND ContentType = 'Movie'"
-        );
-        const tvResult = await dw.query(
-            "SELECT COUNT(*) FROM DimContent WHERE IsCurrent = TRUE AND ContentType = 'Episode'"
-        );
+        const result = await db.query("SELECT COUNT(*) FROM Content  ");
         res.json({
             totalMovies: parseInt(result.rows[0].count),
-            totalEpisodes: parseInt(tvResult.rows[0].count),
+            totalEpisodes: 0,
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -814,11 +809,13 @@ app.get("/dw/summary/contents", async (req, res) => {
 // Tổng số user hoạt động
 app.get("/dw/summary/users", async (req, res) => {
     try {
-        const result = await dw.query(
-            "SELECT COUNT(*) FROM DimUser WHERE IsCurrent = TRUE AND IsActive = TRUE"
+        const result = await db.query(
+            "SELECT COUNT(*) FROM Users WHERE IsActive = TRUE"
         );
+        console.log(result.rows);
         res.json({ totalUsers: parseInt(result.rows[0].count) });
     } catch (err) {
+        console.log(err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -845,7 +842,7 @@ app.get("/dw/views/month", async (req, res) => {
             GROUP BY dd.Year, dd.Month
             ORDER BY dd.Year, dd.Month
         `);
-        
+
         console.log(result.rows);
         res.json(result.rows);
     } catch (err) {
