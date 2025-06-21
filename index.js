@@ -2,9 +2,20 @@ const express = require("express");
 const { Pool } = require("pg");
 const morgan = require("morgan");
 const cors = require("cors");
+const { createServer } = require("http");
+const { Server } = require("socket.io");
 require("dotenv").config();
 
 const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "http://localhost:5173",
+        methods: ["GET", "POST"],
+        credentials: true,
+    },
+});
+
 const port = 3000;
 
 app.use(morgan("dev"));
@@ -93,6 +104,8 @@ app.post("/users", async (req, res) => {
             [Username, Password, Email, FullName, Avatar]
         );
         res.status(201).json(result.rows[0]);
+        // Emit dữ liệu realtime
+        emitDashboardData();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -108,6 +121,8 @@ app.put("/users/:id", async (req, res) => {
         if (result.rows.length === 0)
             return res.status(404).json({ error: "User not found" });
         res.json(result.rows[0]);
+        // Emit dữ liệu realtime
+        emitDashboardData();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -122,6 +137,8 @@ app.delete("/users/:id", async (req, res) => {
         if (result.rows.length === 0)
             return res.status(404).json({ error: "User not found" });
         res.json({ message: "User deleted" });
+        // Emit dữ liệu realtime
+        emitDashboardData();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -194,6 +211,8 @@ app.post("/contents", async (req, res) => {
             ]
         );
         res.status(201).json(result.rows[0]);
+        // Emit dữ liệu realtime
+        emitDashboardData();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -243,6 +262,8 @@ app.put("/contents/:id", async (req, res) => {
         if (result.rows.length === 0)
             return res.status(404).json({ error: "Content not found" });
         res.json(result.rows[0]);
+        // Emit dữ liệu realtime
+        emitDashboardData();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -257,6 +278,8 @@ app.delete("/contents/:id", async (req, res) => {
         if (result.rows.length === 0)
             return res.status(404).json({ error: "Content not found" });
         res.json({ message: "Content deleted" });
+        // Emit dữ liệu realtime
+        emitDashboardData();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1145,6 +1168,219 @@ app.get("/dw/popular-browsers", async (req, res) => {
     }
 });
 
-app.listen(port, () => {
+// ===== TEST ENDPOINT FOR REALTIME =====
+app.post("/test/realtime", async (req, res) => {
+    try {
+        // Simulate data change
+        console.log("Test realtime update triggered");
+        await emitDashboardData();
+        res.json({ message: "Realtime update triggered successfully" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ===== SOCKET.IO REALTIME FUNCTIONS =====
+// Hàm emit dữ liệu dashboard realtime
+async function emitDashboardData() {
+    try {
+        const [
+            monthlyViewsRes,
+            last30DaysViewsRes,
+            topMoviesRes,
+            topRatedMoviesRes,
+            topLikedMoviesRes,
+            genreViewsRes,
+            ratingStatsRes,
+            topUsersRes,
+            avgWatchtimeRes,
+            engagementTypeRes,
+            deviceTypeRes,
+            browsersRes,
+            timelineRes,
+            heatmapRes,
+            topCountriesRes,
+            userLocationRes,
+            summaryContentsRes,
+            summaryUsersRes,
+            summaryViewsRes,
+        ] = await Promise.all([
+            dw.query(`
+                SELECT dd.Month, dd.Year, SUM(fcv.ViewCount) as views
+                FROM FactContentViews fcv
+                JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+                GROUP BY dd.Year, dd.Month
+                ORDER BY dd.Year, dd.Month
+            `),
+            dw.query(`
+                SELECT dd.Date, SUM(fcv.ViewCount) as views
+                FROM FactContentViews fcv
+                JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+                GROUP BY dd.Date
+                ORDER BY dd.Date DESC
+                LIMIT 30
+            `),
+            dw.query(`
+                SELECT dc.Title, SUM(fcp.TotalViews) as views
+                FROM FactContentPerformance fcp
+                JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+                WHERE dc.IsCurrent = TRUE
+                GROUP BY dc.Title
+                ORDER BY views DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT dc.Title, AVG(fcp.AverageRating) as rating
+                FROM FactContentPerformance fcp
+                JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+                WHERE dc.IsCurrent = TRUE
+                GROUP BY dc.Title
+                ORDER BY rating DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT dc.Title, SUM(fue.LikeCount) as likes
+                FROM FactUserEngagement fue
+                JOIN DimContent dc ON fue.ContentKey = dc.ContentKey
+                WHERE fue.EngagementType = 'Like'
+                GROUP BY dc.Title
+                ORDER BY likes DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT dg.GenreName, SUM(fcp.TotalViews) as views
+                FROM FactContentPerformance fcp
+                JOIN DimGenre dg ON fcp.GenreKey = dg.GenreKey
+                GROUP BY dg.GenreName
+                ORDER BY views DESC
+            `),
+            dw.query(`
+                SELECT ROUND(AverageRating) as rating_bin, COUNT(*) as count
+                FROM FactContentPerformance
+                GROUP BY rating_bin
+                ORDER BY rating_bin
+            `),
+            dw.query(`
+                SELECT du.Username, SUM(fcv.ViewCount) as views
+                FROM FactContentViews fcv
+                JOIN DimUser du ON fcv.UserKey = du.UserKey
+                GROUP BY du.Username
+                ORDER BY views DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT du.Username, ROUND(AVG(fcv.DurationWatched)/60) as avg_minutes
+                FROM FactContentViews fcv
+                JOIN DimUser du ON fcv.UserKey = du.UserKey
+                GROUP BY du.Username
+                ORDER BY avg_minutes DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT EngagementType, COUNT(*) as count
+                FROM FactUserEngagement
+                GROUP BY EngagementType
+            `),
+            dw.query(`
+                SELECT DeviceType, COUNT(*) as count
+                FROM DimDevice
+                GROUP BY DeviceType
+            `),
+            dw.query(`
+                SELECT Browser, COUNT(*) as count
+                FROM DimDevice
+                WHERE Browser IS NOT NULL
+                GROUP BY Browser
+                ORDER BY count DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT dd.Date, 
+                    SUM(CASE WHEN EngagementType = 'Like' THEN 1 ELSE 0 END) as likes,
+                    SUM(CASE WHEN EngagementType = 'Comment' THEN 1 ELSE 0 END) as comments,
+                    SUM(CASE WHEN EngagementType = 'Review' THEN 1 ELSE 0 END) as reviews
+                FROM FactUserEngagement fue
+                JOIN DimDate dd ON fue.DateKey = dd.DateKey
+                GROUP BY dd.Date
+                ORDER BY dd.Date
+            `),
+            dw.query(`
+                SELECT dd.DayName, dt.Hour, SUM(fua.ActivityCount) as activity
+                FROM FactUserActivity fua
+                JOIN DimDate dd ON fua.DateKey = dd.DateKey
+                JOIN DimTime dt ON fua.TimeKey = dt.TimeKey
+                GROUP BY dd.DayName, dt.Hour
+                ORDER BY dd.DayName, dt.Hour
+            `),
+            dw.query(`
+                SELECT dc.Country, SUM(fcp.TotalViews) as views
+                FROM FactContentPerformance fcp
+                JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+                WHERE dc.Country IS NOT NULL
+                GROUP BY dc.Country
+                ORDER BY views DESC
+                LIMIT 10
+            `),
+            dw.query(`
+                SELECT City, COUNT(*) as user_count
+                FROM DimLocation
+                GROUP BY City
+                ORDER BY user_count DESC
+            `),
+            db.query("SELECT COUNT(*) FROM Content"),
+            db.query("SELECT COUNT(*) FROM Users WHERE IsActive = TRUE"),
+            dw.query(
+                "SELECT SUM(ViewCount) as totalViews FROM FactContentViews"
+            ),
+        ]);
+
+        const dashboardData = {
+            monthlyViews: monthlyViewsRes.rows,
+            last30DaysViews: last30DaysViewsRes.rows.reverse(),
+            topMovies: topMoviesRes.rows,
+            topRatedMovies: topRatedMoviesRes.rows,
+            topLikedMovies: topLikedMoviesRes.rows,
+            genreViews: genreViewsRes.rows,
+            ratingStats: ratingStatsRes.rows,
+            topUsers: topUsersRes.rows,
+            avgWatchtime: avgWatchtimeRes.rows,
+            engagementType: engagementTypeRes.rows,
+            deviceType: deviceTypeRes.rows,
+            browsers: browsersRes.rows,
+            timeline: timelineRes.rows,
+            heatmap: heatmapRes.rows,
+            topCountries: topCountriesRes.rows,
+            userLocation: userLocationRes.rows,
+            summary: {
+                totalMovies: parseInt(summaryContentsRes.rows[0].count),
+                totalUsers: parseInt(summaryUsersRes.rows[0].count),
+                totalViews: parseInt(summaryViewsRes.rows[0].totalviews || 0),
+            },
+        };
+
+        io.emit("dashboard:update", dashboardData);
+    } catch (error) {
+        console.error("Error emitting dashboard data:", error);
+    }
+}
+
+// Socket.IO connection handling
+io.on("connection", (socket) => {
+    console.log("Client connected:", socket.id);
+
+    // Emit dữ liệu ban đầu khi client kết nối
+    emitDashboardData();
+
+    socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
+    });
+
+    // Client có thể request dữ liệu mới
+    socket.on("dashboard:request-update", () => {
+        emitDashboardData();
+    });
+});
+
+server.listen(port, () => {
     console.log(`App running on port ${port}.`);
 });
