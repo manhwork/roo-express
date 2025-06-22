@@ -1181,187 +1181,212 @@ app.post("/test/realtime", async (req, res) => {
 });
 
 // ===== SOCKET.IO REALTIME FUNCTIONS =====
+let isEmittingData = false; // Flag để tránh trùng lặp request
+let emitTimeout = null; // Timeout để debounce
+
 // Hàm emit dữ liệu dashboard realtime
 async function emitDashboardData() {
-    try {
-        const [
-            monthlyViewsRes,
-            last30DaysViewsRes,
-            topMoviesRes,
-            topRatedMoviesRes,
-            topLikedMoviesRes,
-            genreViewsRes,
-            ratingStatsRes,
-            topUsersRes,
-            avgWatchtimeRes,
-            engagementTypeRes,
-            deviceTypeRes,
-            browsersRes,
-            timelineRes,
-            heatmapRes,
-            topCountriesRes,
-            userLocationRes,
-            summaryContentsRes,
-            summaryUsersRes,
-            summaryViewsRes,
-        ] = await Promise.all([
-            dw.query(`
-                SELECT dd.Month, dd.Year, SUM(fcv.ViewCount) as views
-                FROM FactContentViews fcv
-                JOIN DimDate dd ON fcv.DateKey = dd.DateKey
-                GROUP BY dd.Year, dd.Month
-                ORDER BY dd.Year, dd.Month
-            `),
-            dw.query(`
-                SELECT dd.Date, SUM(fcv.ViewCount) as views
-                FROM FactContentViews fcv
-                JOIN DimDate dd ON fcv.DateKey = dd.DateKey
-                GROUP BY dd.Date
-                ORDER BY dd.Date DESC
-                LIMIT 30
-            `),
-            dw.query(`
-                SELECT dc.Title, SUM(fcp.TotalViews) as views
-                FROM FactContentPerformance fcp
-                JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
-                WHERE dc.IsCurrent = TRUE
-                GROUP BY dc.Title
-                ORDER BY views DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT dc.Title, AVG(fcp.AverageRating) as rating
-                FROM FactContentPerformance fcp
-                JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
-                WHERE dc.IsCurrent = TRUE
-                GROUP BY dc.Title
-                ORDER BY rating DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT dc.Title, SUM(fue.LikeCount) as likes
-                FROM FactUserEngagement fue
-                JOIN DimContent dc ON fue.ContentKey = dc.ContentKey
-                WHERE fue.EngagementType = 'Like'
-                GROUP BY dc.Title
-                ORDER BY likes DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT dg.GenreName, SUM(fcp.TotalViews) as views
-                FROM FactContentPerformance fcp
-                JOIN DimGenre dg ON fcp.GenreKey = dg.GenreKey
-                GROUP BY dg.GenreName
-                ORDER BY views DESC
-            `),
-            dw.query(`
-                SELECT ROUND(AverageRating) as rating_bin, COUNT(*) as count
-                FROM FactContentPerformance
-                GROUP BY rating_bin
-                ORDER BY rating_bin
-            `),
-            dw.query(`
-                SELECT du.Username, SUM(fcv.ViewCount) as views
-                FROM FactContentViews fcv
-                JOIN DimUser du ON fcv.UserKey = du.UserKey
-                GROUP BY du.Username
-                ORDER BY views DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT du.Username, ROUND(AVG(fcv.DurationWatched)/60) as avg_minutes
-                FROM FactContentViews fcv
-                JOIN DimUser du ON fcv.UserKey = du.UserKey
-                GROUP BY du.Username
-                ORDER BY avg_minutes DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT EngagementType, COUNT(*) as count
-                FROM FactUserEngagement
-                GROUP BY EngagementType
-            `),
-            dw.query(`
-                SELECT DeviceType, COUNT(*) as count
-                FROM DimDevice
-                GROUP BY DeviceType
-            `),
-            dw.query(`
-                SELECT Browser, COUNT(*) as count
-                FROM DimDevice
-                WHERE Browser IS NOT NULL
-                GROUP BY Browser
-                ORDER BY count DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT dd.Date, 
-                    SUM(CASE WHEN EngagementType = 'Like' THEN 1 ELSE 0 END) as likes,
-                    SUM(CASE WHEN EngagementType = 'Comment' THEN 1 ELSE 0 END) as comments,
-                    SUM(CASE WHEN EngagementType = 'Review' THEN 1 ELSE 0 END) as reviews
-                FROM FactUserEngagement fue
-                JOIN DimDate dd ON fue.DateKey = dd.DateKey
-                GROUP BY dd.Date
-                ORDER BY dd.Date
-            `),
-            dw.query(`
-                SELECT dd.DayName, dt.Hour, SUM(fua.ActivityCount) as activity
-                FROM FactUserActivity fua
-                JOIN DimDate dd ON fua.DateKey = dd.DateKey
-                JOIN DimTime dt ON fua.TimeKey = dt.TimeKey
-                GROUP BY dd.DayName, dt.Hour
-                ORDER BY dd.DayName, dt.Hour
-            `),
-            dw.query(`
-                SELECT dc.Country, SUM(fcp.TotalViews) as views
-                FROM FactContentPerformance fcp
-                JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
-                WHERE dc.Country IS NOT NULL
-                GROUP BY dc.Country
-                ORDER BY views DESC
-                LIMIT 10
-            `),
-            dw.query(`
-                SELECT City, COUNT(*) as user_count
-                FROM DimLocation
-                GROUP BY City
-                ORDER BY user_count DESC
-            `),
-            db.query("SELECT COUNT(*) FROM Content"),
-            db.query("SELECT COUNT(*) FROM Users WHERE IsActive = TRUE"),
-            dw.query(
-                "SELECT SUM(ViewCount) as totalViews FROM FactContentViews"
-            ),
-        ]);
-
-        const dashboardData = {
-            monthlyViews: monthlyViewsRes.rows,
-            last30DaysViews: last30DaysViewsRes.rows.reverse(),
-            topMovies: topMoviesRes.rows,
-            topRatedMovies: topRatedMoviesRes.rows,
-            topLikedMovies: topLikedMoviesRes.rows,
-            genreViews: genreViewsRes.rows,
-            ratingStats: ratingStatsRes.rows,
-            topUsers: topUsersRes.rows,
-            avgWatchtime: avgWatchtimeRes.rows,
-            engagementType: engagementTypeRes.rows,
-            deviceType: deviceTypeRes.rows,
-            browsers: browsersRes.rows,
-            timeline: timelineRes.rows,
-            heatmap: heatmapRes.rows,
-            topCountries: topCountriesRes.rows,
-            userLocation: userLocationRes.rows,
-            summary: {
-                totalMovies: parseInt(summaryContentsRes.rows[0].count),
-                totalUsers: parseInt(summaryUsersRes.rows[0].count),
-                totalViews: parseInt(summaryViewsRes.rows[0].totalviews || 0),
-            },
-        };
-
-        io.emit("dashboard:update", dashboardData);
-    } catch (error) {
-        console.error("Error emitting dashboard data:", error);
+    // Nếu đang emit thì bỏ qua
+    if (isEmittingData) {
+        console.log("Dashboard data emission already in progress, skipping...");
+        return;
     }
+
+    // Clear timeout cũ nếu có
+    if (emitTimeout) {
+        clearTimeout(emitTimeout);
+    }
+
+    // Debounce: đợi 1 giây trước khi thực hiện
+    emitTimeout = setTimeout(async () => {
+        try {
+            isEmittingData = true;
+            console.log("Starting dashboard data emission...");
+
+            const [
+                monthlyViewsRes,
+                last30DaysViewsRes,
+                topMoviesRes,
+                topRatedMoviesRes,
+                topLikedMoviesRes,
+                genreViewsRes,
+                ratingStatsRes,
+                topUsersRes,
+                avgWatchtimeRes,
+                engagementTypeRes,
+                deviceTypeRes,
+                browsersRes,
+                timelineRes,
+                heatmapRes,
+                topCountriesRes,
+                userLocationRes,
+                summaryContentsRes,
+                summaryUsersRes,
+                summaryViewsRes,
+            ] = await Promise.all([
+                dw.query(`
+                    SELECT dd.Month, dd.Year, SUM(fcv.ViewCount) as views
+                    FROM FactContentViews fcv
+                    JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+                    GROUP BY dd.Year, dd.Month
+                    ORDER BY dd.Year, dd.Month
+                `),
+                dw.query(`
+                    SELECT dd.Date, SUM(fcv.ViewCount) as views
+                    FROM FactContentViews fcv
+                    JOIN DimDate dd ON fcv.DateKey = dd.DateKey
+                    GROUP BY dd.Date
+                    ORDER BY dd.Date DESC
+                    LIMIT 30
+                `),
+                dw.query(`
+                    SELECT dc.Title, SUM(fcp.TotalViews) as views
+                    FROM FactContentPerformance fcp
+                    JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+                    WHERE dc.IsCurrent = TRUE
+                    GROUP BY dc.Title
+                    ORDER BY views DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT dc.Title, AVG(fcp.AverageRating) as rating
+                    FROM FactContentPerformance fcp
+                    JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+                    WHERE dc.IsCurrent = TRUE
+                    GROUP BY dc.Title
+                    ORDER BY rating DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT dc.Title, SUM(fue.LikeCount) as likes
+                    FROM FactUserEngagement fue
+                    JOIN DimContent dc ON fue.ContentKey = dc.ContentKey
+                    WHERE fue.EngagementType = 'Like'
+                    GROUP BY dc.Title
+                    ORDER BY likes DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT dg.GenreName, SUM(fcp.TotalViews) as views
+                    FROM FactContentPerformance fcp
+                    JOIN DimGenre dg ON fcp.GenreKey = dg.GenreKey
+                    GROUP BY dg.GenreName
+                    ORDER BY views DESC
+                `),
+                dw.query(`
+                    SELECT ROUND(AverageRating) as rating_bin, COUNT(*) as count
+                    FROM FactContentPerformance
+                    GROUP BY rating_bin
+                    ORDER BY rating_bin
+                `),
+                dw.query(`
+                    SELECT du.Username, SUM(fcv.ViewCount) as views
+                    FROM FactContentViews fcv
+                    JOIN DimUser du ON fcv.UserKey = du.UserKey
+                    GROUP BY du.Username
+                    ORDER BY views DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT du.Username, ROUND(AVG(fcv.DurationWatched)/60) as avg_minutes
+                    FROM FactContentViews fcv
+                    JOIN DimUser du ON fcv.UserKey = du.UserKey
+                    GROUP BY du.Username
+                    ORDER BY avg_minutes DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT EngagementType, COUNT(*) as count
+                    FROM FactUserEngagement
+                    GROUP BY EngagementType
+                `),
+                dw.query(`
+                    SELECT DeviceType, COUNT(*) as count
+                    FROM DimDevice
+                    GROUP BY DeviceType
+                `),
+                dw.query(`
+                    SELECT Browser, COUNT(*) as count
+                    FROM DimDevice
+                    WHERE Browser IS NOT NULL
+                    GROUP BY Browser
+                    ORDER BY count DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT dd.Date, 
+                        SUM(CASE WHEN EngagementType = 'Like' THEN 1 ELSE 0 END) as likes,
+                        SUM(CASE WHEN EngagementType = 'Comment' THEN 1 ELSE 0 END) as comments,
+                        SUM(CASE WHEN EngagementType = 'Review' THEN 1 ELSE 0 END) as reviews
+                    FROM FactUserEngagement fue
+                    JOIN DimDate dd ON fue.DateKey = dd.DateKey
+                    GROUP BY dd.Date
+                    ORDER BY dd.Date
+                `),
+                dw.query(`
+                    SELECT dd.DayName, dt.Hour, SUM(fua.ActivityCount) as activity
+                    FROM FactUserActivity fua
+                    JOIN DimDate dd ON fua.DateKey = dd.DateKey
+                    JOIN DimTime dt ON fua.TimeKey = dt.TimeKey
+                    GROUP BY dd.DayName, dt.Hour
+                    ORDER BY dd.DayName, dt.Hour
+                `),
+                dw.query(`
+                    SELECT dc.Country, SUM(fcp.TotalViews) as views
+                    FROM FactContentPerformance fcp
+                    JOIN DimContent dc ON fcp.ContentKey = dc.ContentKey
+                    WHERE dc.Country IS NOT NULL
+                    GROUP BY dc.Country
+                    ORDER BY views DESC
+                    LIMIT 10
+                `),
+                dw.query(`
+                    SELECT City, COUNT(*) as user_count
+                    FROM DimLocation
+                    GROUP BY City
+                    ORDER BY user_count DESC
+                `),
+                db.query("SELECT COUNT(*) FROM Content"),
+                db.query("SELECT COUNT(*) FROM Users WHERE IsActive = TRUE"),
+                dw.query(
+                    "SELECT SUM(ViewCount) as totalViews FROM FactContentViews"
+                ),
+            ]);
+
+            const dashboardData = {
+                monthlyViews: monthlyViewsRes.rows,
+                last30DaysViews: last30DaysViewsRes.rows.reverse(),
+                topMovies: topMoviesRes.rows,
+                topRatedMovies: topRatedMoviesRes.rows,
+                topLikedMovies: topLikedMoviesRes.rows,
+                genreViews: genreViewsRes.rows,
+                ratingStats: ratingStatsRes.rows,
+                topUsers: topUsersRes.rows,
+                avgWatchtime: avgWatchtimeRes.rows,
+                engagementType: engagementTypeRes.rows,
+                deviceType: deviceTypeRes.rows,
+                browsers: browsersRes.rows,
+                timeline: timelineRes.rows,
+                heatmap: heatmapRes.rows,
+                topCountries: topCountriesRes.rows,
+                userLocation: userLocationRes.rows,
+                summary: {
+                    totalMovies: parseInt(summaryContentsRes.rows[0].count),
+                    totalUsers: parseInt(summaryUsersRes.rows[0].count),
+                    totalViews: parseInt(
+                        summaryViewsRes.rows[0].totalviews || 0
+                    ),
+                },
+            };
+
+            io.emit("dashboard:update", dashboardData);
+            console.log("Dashboard data emission completed successfully");
+        } catch (error) {
+            console.error("Error emitting dashboard data:", error);
+        } finally {
+            isEmittingData = false;
+        }
+    }, 1000); // Debounce 1 giây
 }
 
 // Socket.IO connection handling
@@ -1377,7 +1402,17 @@ io.on("connection", (socket) => {
 
     // Client có thể request dữ liệu mới
     socket.on("dashboard:request-update", () => {
+        console.log(`Client ${socket.id} requested dashboard update`);
         emitDashboardData();
+    });
+
+    // Thêm event để client có thể kiểm tra trạng thái server
+    socket.on("dashboard:status", () => {
+        socket.emit("dashboard:status", {
+            isEmittingData,
+            connectedClients: io.engine.clientsCount,
+            timestamp: new Date().toISOString(),
+        });
     });
 });
 
